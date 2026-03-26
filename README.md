@@ -71,6 +71,15 @@ Run the development server:
 npm run dev
 ```
 
+Run the development server over HTTPS with a local self-signed certificate:
+
+```bash
+npm run dev:https
+```
+
+The HTTPS script writes the generated certificate and key under `.data/tls/`.
+Your browser will show a warning unless you replace them with a trusted certificate.
+
 Validation commands:
 
 ```bash
@@ -98,6 +107,11 @@ Current container defaults:
 - `HOME=/var/lib/copilot`
 - `XDG_RUNTIME_DIR=/var/lib/copilot/.runtime`
 - `DBUS_SESSION_BUS_ADDRESS=unix:path=/var/lib/copilot/.runtime/bus`
+- `HTTPS=true`
+- `TLS_AUTOGENERATE=true`
+- `TLS_CERT_PATH=/app/.data/tls/server.crt`
+- `TLS_KEY_PATH=/app/.data/tls/server.key`
+- `TLS_HOSTS=localhost,127.0.0.1,gpt_chat`
 - named volume `copilot_cli_home` mounted at `/var/lib/copilot`
 
 Build and start the stack:
@@ -105,6 +119,29 @@ Build and start the stack:
 ```bash
 docker compose up -d --build
 ```
+
+Open the app at:
+
+```text
+https://localhost:3000
+```
+
+On first boot, the container generates a self-signed certificate inside `.data/tls/`
+unless you override `TLS_CERT_PATH` and `TLS_KEY_PATH` with your own files.
+
+### Use Your Own TLS Certificate
+
+If you already have a certificate, point the service to it and disable automatic generation:
+
+```bash
+HTTPS=true
+TLS_AUTOGENERATE=false
+TLS_CERT_PATH=/app/.data/tls/server.crt
+TLS_KEY_PATH=/app/.data/tls/server.key
+```
+
+For Docker, mount the certificate and key into the container and set those paths in
+your environment. `TLS_HOSTS` only affects auto-generated certificates.
 
 ### Authenticate Copilot CLI Inside the Running Container
 

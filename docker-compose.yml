@@ -9,6 +9,11 @@ services:
     environment:
       NODE_ENV: production
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
+      HTTPS: ${HTTPS:-true}
+      TLS_AUTOGENERATE: ${TLS_AUTOGENERATE:-true}
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-/app/.data/tls/server.crt}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-/app/.data/tls/server.key}
+      TLS_HOSTS: ${TLS_HOSTS:-localhost,127.0.0.1,gpt_chat}
       HOME: /var/lib/copilot
       XDG_RUNTIME_DIR: /var/lib/copilot/.runtime
       DBUS_SESSION_BUS_ADDRESS: unix:path=/var/lib/copilot/.runtime/bus

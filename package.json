@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "HTTPS=true TLS_AUTOGENERATE=true node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },
