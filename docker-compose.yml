@@ -1,0 +1,20 @@
+services:
+  gpt_chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gpt_chat
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
+      HOME: /var/lib/copilot
+      COPILOT_CLI_PATH: /usr/local/bin/copilot
+    volumes:
+      - ./.data:/app/.data
+      - copilot_cli_home:/var/lib/copilot
+    restart: unless-stopped
+
+volumes:
+  copilot_cli_home:

@@ -1,0 +1,8 @@
+- Build inside `src/` using the Next.js App Router.
+- Keep the product chat-only. Do not add MCP, custom agents, or tool-enabled workflows unless explicitly requested.
+- Preserve the bilingual UI contract for English and Spanish.
+- Keep model listing sourced from the GitHub Copilot SDK and display billing multipliers when available.
+- Keep session auto-compaction enabled through the Copilot SDK with `backgroundCompactionThreshold: 0.60` and `bufferExhaustionThreshold: 0.95`.
+- Store GitHub credentials only on the server and only in encrypted form.
+- Treat `.data/` as local runtime state and never depend on it being committed.
+- Prefer minimal dependencies and avoid adding a database unless the task requires it.

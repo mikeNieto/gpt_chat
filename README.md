@@ -1,0 +1,202 @@
+# gpt_chat
+
+Private ChatGPT-style web client for personal intranet use, built with Next.js and the GitHub Copilot SDK.
+
+## What Is Implemented
+
+- Chat-only experience with ChatGPT-like layout
+- Bilingual UI in English and Spanish
+- Sidebar with conversation history
+- Settings page for:
+  - default model selection
+  - model cost multipliers such as `3x`, `1x`, `0.25x`
+  - GitHub Copilot credential storage
+- Secure credential storage using application-layer encryption
+- Local persistence for chats, settings, and runtime diagnostics
+- Native Copilot SDK infinite sessions with auto-compaction:
+  - background compaction at `60%`
+  - blocking compaction at `95%`
+
+## Runtime Requirements
+
+- Node.js 18+
+- GitHub Copilot CLI installed and available in `PATH`, unless you will only use an explicit GitHub token
+- A valid GitHub Copilot-compatible token or an authenticated Copilot CLI session
+- A `MASTER_ENCRYPTION_KEY` for secure credential storage
+
+## Environment
+
+Copy the example values into a local environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Set at least:
+
+```bash
+MASTER_ENCRYPTION_KEY=
+```
+
+`MASTER_ENCRYPTION_KEY` must be either:
+
+- 32 bytes encoded as base64
+- 64 hex characters
+
+Example generation:
+
+```bash
+openssl rand -base64 32
+```
+
+Optional:
+
+```bash
+COPILOT_CLI_PATH=
+```
+
+Use `COPILOT_CLI_PATH` only if the `copilot` binary is not already discoverable in `PATH`.
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the development server:
+
+```bash
+npm run dev
+```
+
+Validation commands:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+## Docker Compose
+
+The production container installs GitHub Copilot CLI inside the image and uses a
+dedicated Docker volume to persist the CLI home directory, including the login
+state created by `copilot`.
+
+Current container defaults:
+
+- `COPILOT_CLI_PATH=/usr/local/bin/copilot`
+- `HOME=/var/lib/copilot`
+- named volume `copilot_cli_home` mounted at `/var/lib/copilot`
+
+Build and start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+### Authenticate Copilot CLI Inside the Running Container
+
+If you are not storing a GitHub token in the app settings, the application will
+use the authenticated Copilot CLI session from inside the container.
+
+1. Connect to the running container:
+
+```bash
+docker compose exec gpt_chat sh
+```
+
+2. Start the CLI:
+
+```bash
+copilot
+```
+
+3. Inside the interactive CLI, run:
+
+```text
+/login
+```
+
+4. Complete the GitHub authentication flow shown by the CLI.
+5. Exit the CLI, then exit the shell:
+
+```bash
+exit
+```
+
+Because the CLI home directory is stored in the `copilot_cli_home` volume, the
+login should remain available after container restarts or recreations.
+
+### Validate the Session Later
+
+Reconnect to the container:
+
+```bash
+docker compose exec gpt_chat sh
+```
+
+Then run:
+
+```bash
+copilot
+```
+
+If the CLI opens without asking you to authenticate again, the persisted session
+is still valid.
+
+### Alternative: Authenticate With a Token
+
+The Copilot CLI also supports authentication through `GH_TOKEN` or
+`GITHUB_TOKEN`. According to the GitHub Copilot CLI documentation, the token must
+have the `Copilot Requests` permission enabled.
+
+This project can already use a stored GitHub token from the Settings screen. If
+that token exists, it takes precedence over the CLI login.
+
+## Credential Modes
+
+The app supports two runtime modes:
+
+1. Stored token from Settings
+2. Existing `copilot` CLI login on the host machine
+3. Existing `copilot` CLI login persisted inside the Docker container volume
+
+If a stored token exists, it takes precedence.
+
+## Persistence
+
+This MVP uses local file-backed persistence under `.data/` for simplicity in a personal intranet deployment.
+
+Stored locally:
+
+- chat threads
+- chat messages
+- UI settings
+- encrypted GitHub token
+- compaction diagnostics
+
+## Auto-Compaction
+
+The chat sessions use the GitHub Copilot SDK native infinite session support.
+
+Configured thresholds:
+
+- `backgroundCompactionThreshold: 0.60`
+- `bufferExhaustionThreshold: 0.95`
+
+The app also captures:
+
+- `session.compaction_start`
+- `session.compaction_complete`
+
+These are stored as local diagnostics for troubleshooting.
+
+## Notes
+
+- The GitHub Copilot SDK is currently in Technical Preview.
+- This project intentionally disables tools and agent-like behavior to stay in chat-only mode.
+- The current persistence layer is intentionally simple and can be replaced later with SQLite or Postgres if needed.
+- For Docker-based production deployments that rely on CLI login, you must complete `copilot` authentication inside the running container at least once.
