@@ -79,6 +79,8 @@ npm run dev:https
 
 The HTTPS script writes the generated certificate and key under `.data/tls/`.
 Your browser will show a warning unless you replace them with a trusted certificate.
+If you open the app from another machine on your LAN, include that hostname or IP in `TLS_HOSTS`
+before generating the certificate.
 
 Validation commands:
 
@@ -90,7 +92,12 @@ npm run build
 
 ## Docker Compose
 
-The production container installs GitHub Copilot CLI inside the image and uses a
+The production deployment now uses two containers:
+
+- `gpt_chat` for the Next.js app on internal HTTP
+- `nginx` for TLS termination and reverse proxy on ports `80` and `443`
+
+The app container installs GitHub Copilot CLI inside the image and uses a
 dedicated Docker volume to persist the CLI home directory.
 
 It also starts a lightweight Linux secrets stack inside the container:
@@ -101,17 +108,12 @@ It also starts a lightweight Linux secrets stack inside the container:
 That gives Copilot CLI a Secret Service-compatible vault instead of forcing it
 to fall back to plain-text token storage.
 
-Current container defaults:
+Current app container defaults:
 
 - `COPILOT_CLI_PATH=/usr/local/bin/copilot`
 - `HOME=/var/lib/copilot`
 - `XDG_RUNTIME_DIR=/var/lib/copilot/.runtime`
 - `DBUS_SESSION_BUS_ADDRESS=unix:path=/var/lib/copilot/.runtime/bus`
-- `HTTPS=true`
-- `TLS_AUTOGENERATE=true`
-- `TLS_CERT_PATH=/app/.data/tls/server.crt`
-- `TLS_KEY_PATH=/app/.data/tls/server.key`
-- `TLS_HOSTS=localhost,127.0.0.1,gpt_chat`
 - named volume `copilot_cli_home` mounted at `/var/lib/copilot`
 
 Build and start the stack:
@@ -123,25 +125,77 @@ docker compose up -d --build
 Open the app at:
 
 ```text
-https://localhost:3000
+https://localhost
 ```
 
-On first boot, the container generates a self-signed certificate inside `.data/tls/`
-unless you override `TLS_CERT_PATH` and `TLS_KEY_PATH` with your own files.
+Nginx expects a certificate and key inside:
+
+```text
+.data/nginx/certs/server.crt
+.data/nginx/certs/server.key
+```
+
+You can change the mounted host directory with:
+
+```bash
+NGINX_CERTS_DIR=./.data/nginx/certs
+```
+
+### Important Limitation
+
+Nginx does not make certificates trusted by itself.
+
+To avoid the browser warning completely, the certificate presented by Nginx must be trusted by
+the client device. For a home server on a private IP like `192.168.2.200`:
+
+- a public CA normally will not issue a certificate for that private IP
+- a self-signed certificate will still show as insecure
+- a local CA such as `mkcert` works if you install that CA on each device
+- a public certificate works if you use a real domain that resolves to your server
+
+### Recommended Options
+
+Option 1: local trusted CA with `mkcert`
+
+```bash
+mkdir -p .data/nginx/certs
+mkcert -cert-file .data/nginx/certs/server.crt \
+  -key-file .data/nginx/certs/server.key \
+  localhost 127.0.0.1 192.168.2.200 gpt_chat
+docker compose up -d --build
+```
+
+Option 2: real domain + CA-issued certificate
+
+Use a domain name that points to your server and place the CA-issued files at:
+
+```text
+.data/nginx/certs/server.crt
+.data/nginx/certs/server.key
+```
+
+### Why This Is Better Than App-Level HTTPS
+
+- TLS is terminated in Nginx, which is the right place operationally
+- the Next.js container stays simpler and serves plain HTTP internally
+- replacing certificates no longer requires changing app startup logic
+- you can later add redirects, HSTS, auth, or rate limiting in one place
 
 ### Use Your Own TLS Certificate
 
-If you already have a certificate, point the service to it and disable automatic generation:
+If you already have a trusted certificate, place it in the mounted certs directory:
 
 ```bash
-HTTPS=true
-TLS_AUTOGENERATE=false
-TLS_CERT_PATH=/app/.data/tls/server.crt
-TLS_KEY_PATH=/app/.data/tls/server.key
+mkdir -p .data/nginx/certs
+# copy your certificate to .data/nginx/certs/server.crt
+# copy your private key to .data/nginx/certs/server.key
 ```
 
-For Docker, mount the certificate and key into the container and set those paths in
-your environment. `TLS_HOSTS` only affects auto-generated certificates.
+Then start:
+
+```bash
+docker compose up -d --build
+```
 
 ### Authenticate Copilot CLI Inside the Running Container
 

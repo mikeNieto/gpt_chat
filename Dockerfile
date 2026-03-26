@@ -29,13 +29,9 @@ ENV HOME=/var/lib/copilot
 ENV XDG_RUNTIME_DIR=/var/lib/copilot/.runtime
 ENV DBUS_SESSION_BUS_ADDRESS=unix:path=/var/lib/copilot/.runtime/bus
 ENV COPILOT_CLI_PATH=/usr/local/bin/copilot
-ENV HTTPS=true
-ENV TLS_AUTOGENERATE=true
-ENV TLS_CERT_PATH=/app/.data/tls/server.crt
-ENV TLS_KEY_PATH=/app/.data/tls/server.key
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends dbus gnome-keyring openssl \
+	&& apt-get install -y --no-install-recommends dbus gnome-keyring \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& npm install -g @github/copilot \
 	&& mkdir -p /app/.data "$HOME" "$XDG_RUNTIME_DIR"
@@ -43,7 +39,6 @@ RUN apt-get update \
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/next.config.ts ./next.config.ts
-COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

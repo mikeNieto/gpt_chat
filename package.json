@@ -6,7 +6,7 @@
     "dev": "next dev",
     "dev:https": "HTTPS=true TLS_AUTOGENERATE=true node server.js",
     "build": "next build",
-    "start": "node server.js",
+    "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },

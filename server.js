@@ -35,9 +35,15 @@ function buildSubjectAltName(hosts) {
 function ensureSelfSignedCertificate(certPath, keyPath) {
   const certDir = path.dirname(certPath);
   const keyDir = path.dirname(keyPath);
+  const forceRegenerate = isEnabled(process.env.TLS_FORCE_REGENERATE);
 
   fs.mkdirSync(certDir, { recursive: true });
   fs.mkdirSync(keyDir, { recursive: true });
+
+  if (forceRegenerate) {
+    fs.rmSync(certPath, { force: true });
+    fs.rmSync(keyPath, { force: true });
+  }
 
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     return;
