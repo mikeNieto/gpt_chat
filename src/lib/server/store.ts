@@ -26,6 +26,7 @@ const DEFAULT_STORE: StoreSchema = {
   settings: {
     languagePreference: "system",
     defaultModelId: DEFAULT_MODEL_ID,
+    themePreference: "dark",
   },
   secrets: {
     githubToken: null,
@@ -41,6 +42,7 @@ function normalizeSettings(settings: Partial<AppSettings> | undefined): AppSetti
   return {
     languagePreference: settings?.languagePreference ?? DEFAULT_STORE.settings.languagePreference,
     defaultModelId: settings?.defaultModelId ?? DEFAULT_MODEL_ID,
+    themePreference: settings?.themePreference ?? DEFAULT_STORE.settings.themePreference,
   };
 }
 

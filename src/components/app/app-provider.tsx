@@ -18,6 +18,7 @@ import type {
   LanguagePreference,
   ModelOption,
   RuntimeConnectionStatus,
+  ThemePreference,
   ThreadRecord,
 } from "@/lib/types";
 
@@ -26,6 +27,7 @@ interface AppContextValue {
   settings: AppSettings;
   dictionary: Dictionary;
   language: "en" | "es";
+  theme: ThemePreference;
   models: ModelOption[];
   modelsConnection: RuntimeConnectionStatus | null;
   credentialStatus: CredentialStatus | null;
@@ -34,6 +36,7 @@ interface AppContextValue {
   refreshBootstrap: () => Promise<void>;
   refreshModels: () => Promise<void>;
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>;
+  toggleTheme: () => Promise<void>;
   storeToken: (token: string) => Promise<string | null>;
   clearToken: () => Promise<void>;
 }
@@ -41,6 +44,7 @@ interface AppContextValue {
 const defaultSettings: AppSettings = {
   languagePreference: "system",
   defaultModelId: DEFAULT_MODEL_ID,
+  themePreference: "dark",
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -109,6 +113,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshModels();
   }, [refreshBootstrap, refreshModels]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.themePreference;
+  }, [settings.themePreference]);
+
   const updateSettingsValue = useCallback(
     async (patch: Partial<AppSettings>) => {
       const payload = await readJson<{ settings: AppSettings }>(
@@ -170,6 +178,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     browserLanguage,
   );
   const dictionary = dictionaries[language];
+  const theme = settings.themePreference;
+
+  const toggleTheme = useCallback(async () => {
+    await updateSettingsValue({
+      themePreference: theme === "dark" ? "light" : "dark",
+    });
+  }, [theme, updateSettingsValue]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -177,6 +192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       settings,
       dictionary,
       language,
+      theme,
       models,
       modelsConnection,
       credentialStatus,
@@ -185,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshBootstrap,
       refreshModels,
       updateSettings: updateSettingsValue,
+      toggleTheme,
       storeToken,
       clearToken: clearTokenValue,
     }),
@@ -193,6 +210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       settings,
       dictionary,
       language,
+      theme,
       models,
       modelsConnection,
       credentialStatus,
@@ -201,6 +219,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshBootstrap,
       refreshModels,
       updateSettingsValue,
+      toggleTheme,
       storeToken,
       clearTokenValue,
     ],

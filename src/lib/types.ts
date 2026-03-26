@@ -1,5 +1,7 @@
 export type LanguagePreference = "system" | "en" | "es";
 
+export type ThemePreference = "dark" | "light";
+
 export type ResolvedLanguage = "en" | "es";
 
 export type MessageRole = "user" | "assistant";
@@ -24,6 +26,7 @@ export interface MessageRecord {
 export interface AppSettings {
   languagePreference: LanguagePreference;
   defaultModelId: string | null;
+  themePreference: ThemePreference;
 }
 
 export interface EncryptedSecret {

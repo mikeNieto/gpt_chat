@@ -27,6 +27,7 @@ export async function PUT(request: Request) {
   const settings = await updateSettings({
     ...(body.languagePreference ? { languagePreference: body.languagePreference } : {}),
     ...(body.defaultModelId !== undefined ? { defaultModelId: body.defaultModelId } : {}),
+    ...(body.themePreference ? { themePreference: body.themePreference } : {}),
   });
 
   return NextResponse.json({ settings });

@@ -64,7 +64,7 @@ function Sidebar({ mounted }: { mounted: boolean }) {
                   <span className="app-sidebar__title">{thread.title}</span>
                   <span className="app-sidebar__subtitle">
                     {thread.modelId
-                      ? modelLabelById.get(thread.modelId) ?? thread.modelId
+                      ? (modelLabelById.get(thread.modelId) ?? thread.modelId)
                       : dictionary.defaultModel}
                   </span>
                 </div>
@@ -82,7 +82,7 @@ function Sidebar({ mounted }: { mounted: boolean }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { dictionary, modelsConnection } = useAppContext();
+  const { dictionary, modelsConnection, theme, toggleTheme } = useAppContext();
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -102,6 +102,30 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ? dictionary.connected
                 : dictionary.unavailable}
             </span>
+          </div>
+          <div className="app-header__cluster">
+            <button
+              className="ghost-button theme-toggle"
+              type="button"
+              onClick={() => void toggleTheme()}
+              aria-label={
+                theme === "dark"
+                  ? dictionary.switchToLight
+                  : dictionary.switchToDark
+              }
+              title={
+                theme === "dark"
+                  ? dictionary.switchToLight
+                  : dictionary.switchToDark
+              }
+            >
+              <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+              <span>
+                {theme === "dark"
+                  ? dictionary.themeLight
+                  : dictionary.themeDark}
+              </span>
+            </button>
           </div>
         </header>
         <div className="page-area">
