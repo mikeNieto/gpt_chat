@@ -12,24 +12,40 @@ interface ThreadViewProps {
   threadId: string;
 }
 
-function parseEventStreamChunk(chunk: string) {
-  return chunk
-    .split("\n\n")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .map((segment) => {
-      const lines = segment.split("\n");
-      const event =
-        lines
-          .find((line) => line.startsWith("event:"))
-          ?.slice(6)
-          .trim() ?? "message";
-      const dataLine = lines.find((line) => line.startsWith("data:"));
-      return {
-        event,
-        data: dataLine ? JSON.parse(dataLine.slice(5).trim()) : {},
-      } as { event: string; data: Record<string, unknown> };
-    });
+function parseEventStreamBlock(block: string) {
+  const lines = block.split("\n");
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(":")) {
+      continue;
+    }
+
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim() || "message";
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (!dataLines.length) {
+    return null;
+  }
+
+  return {
+    event,
+    data: JSON.parse(dataLines.join("\n")) as Record<string, unknown>,
+  };
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 export function ThreadView({ threadId }: ThreadViewProps) {
@@ -43,8 +59,14 @@ export function ThreadView({ threadId }: ThreadViewProps) {
   const [missingThread, setMissingThread] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null,
+  );
   const autoPromptRef = useRef<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const pendingAssistantContentRef = useRef("");
+  const flushFrameRef = useRef<number | null>(null);
+  const streamingMessageCreatedAtRef = useRef<string | null>(null);
   const activeModelId = thread?.modelId ?? settings.defaultModelId;
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
@@ -69,6 +91,68 @@ export function ThreadView({ threadId }: ThreadViewProps) {
   }, []);
 
   const shouldStickToBottomRef = useRef(true);
+
+  const flushAssistantContent = useCallback(
+    (messageId: string, nextContent: string) => {
+      setMessages((current) => {
+        const next = [...current];
+        const index = next.findIndex((message) => message.id === messageId);
+        if (index === -1) {
+          return [
+            ...current,
+            {
+              id: messageId,
+              threadId,
+              role: "assistant",
+              content: nextContent,
+              createdAt:
+                streamingMessageCreatedAtRef.current ??
+                new Date().toISOString(),
+            },
+          ];
+        }
+
+        const message = next[index];
+        if (message.role !== "assistant" || message.content === nextContent) {
+          return current;
+        }
+
+        next[index] = {
+          ...message,
+          content: nextContent,
+        };
+        return next;
+      });
+    },
+    [threadId],
+  );
+
+  const scheduleAssistantFlush = useCallback(
+    (messageId: string) => {
+      if (flushFrameRef.current !== null) {
+        return;
+      }
+
+      flushFrameRef.current = requestAnimationFrame(() => {
+        flushFrameRef.current = null;
+        flushAssistantContent(messageId, pendingAssistantContentRef.current);
+      });
+    },
+    [flushAssistantContent],
+  );
+
+  const finishAssistantFlush = useCallback(
+    (messageId: string, finalContent: string) => {
+      if (flushFrameRef.current !== null) {
+        cancelAnimationFrame(flushFrameRef.current);
+        flushFrameRef.current = null;
+      }
+
+      pendingAssistantContentRef.current = finalContent;
+      flushAssistantContent(messageId, finalContent);
+    },
+    [flushAssistantContent],
+  );
 
   const fetchThread = useCallback(async () => {
     const response = await fetch(`/api/threads/${threadId}`, {
@@ -101,6 +185,14 @@ export function ThreadView({ threadId }: ThreadViewProps) {
 
     scrollToBottom(messages.length > 1 ? "smooth" : "auto");
   }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    return () => {
+      if (flushFrameRef.current !== null) {
+        cancelAnimationFrame(flushFrameRef.current);
+      }
+    };
+  }, []);
 
   const activeModelName = useMemo(() => {
     if (!activeModelId) {
@@ -140,6 +232,9 @@ export function ThreadView({ threadId }: ThreadViewProps) {
       };
 
       setMessages((current) => [...current, userMessage, assistantPlaceholder]);
+      setStreamingMessageId(assistantPlaceholder.id);
+      pendingAssistantContentRef.current = "";
+      streamingMessageCreatedAtRef.current = assistantPlaceholder.createdAt;
       setInput("");
       requestAnimationFrame(() => scrollToBottom("smooth"));
 
@@ -164,6 +259,33 @@ export function ThreadView({ threadId }: ThreadViewProps) {
         const decoder = new TextDecoder();
         let buffer = "";
 
+        const applyEvent = (event: {
+          event: string;
+          data: Record<string, unknown>;
+        }) => {
+          if (event.event === "delta") {
+            const chunk = String(event.data.content ?? "");
+            pendingAssistantContentRef.current += chunk;
+            scheduleAssistantFlush(assistantPlaceholder.id);
+          }
+
+          if (event.event === "compaction") {
+            const phase = String(event.data.phase ?? "start");
+            setStatus(`Compaction ${phase}`);
+          }
+
+          if (event.event === "error") {
+            throw new Error(
+              String(event.data.message ?? "Unable to process the response."),
+            );
+          }
+
+          if (event.event === "done") {
+            const final = String(event.data.content ?? "");
+            finishAssistantFlush(assistantPlaceholder.id, final);
+          }
+        };
+
         while (true) {
           const { value, done } = await reader.read();
           if (done) {
@@ -173,52 +295,41 @@ export function ThreadView({ threadId }: ThreadViewProps) {
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split("\n\n");
           buffer = parts.pop() ?? "";
+          let sawDelta = false;
 
-          for (const event of parts.flatMap(parseEventStreamChunk)) {
-            if (event.event === "delta") {
-              const chunk = String(event.data.content ?? "");
-              setMessages((current) => {
-                const next = [...current];
-                const last = next[next.length - 1];
-                if (last?.role === "assistant") {
-                  next[next.length - 1] = {
-                    ...last,
-                    content: `${last.content}${chunk}`,
-                  };
-                }
-                return next;
-              });
+          for (const part of parts) {
+            const event = parseEventStreamBlock(part);
+            if (event) {
+              if (event.event === "delta") {
+                sawDelta = true;
+              }
+              applyEvent(event);
             }
+          }
 
-            if (event.event === "compaction") {
-              const phase = String(event.data.phase ?? "start");
-              setStatus(`Compaction ${phase}`);
-            }
+          if (sawDelta) {
+            await waitForNextFrame();
+          }
+        }
 
-            if (event.event === "error") {
-              throw new Error(
-                String(event.data.message ?? "Unable to process the response."),
-              );
-            }
-
-            if (event.event === "done") {
-              const final = String(event.data.content ?? "");
-              setMessages((current) => {
-                const next = [...current];
-                const last = next[next.length - 1];
-                if (last?.role === "assistant") {
-                  next[next.length - 1] = { ...last, content: final };
-                }
-                return next;
-              });
-            }
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          const event = parseEventStreamBlock(buffer);
+          if (event) {
+            applyEvent(event);
           }
         }
 
         setStatus(null);
+        setStreamingMessageId(null);
         await fetchThread();
         await refreshBootstrap();
       } catch (error) {
+        finishAssistantFlush(
+          assistantPlaceholder.id,
+          pendingAssistantContentRef.current,
+        );
+        setStreamingMessageId(null);
         const message =
           error instanceof Error ? error.message : "Unable to send the prompt.";
         setStatus(message);
@@ -229,9 +340,11 @@ export function ThreadView({ threadId }: ThreadViewProps) {
     [
       dictionary.sending,
       fetchThread,
+      finishAssistantFlush,
       isSending,
       refreshBootstrap,
       scrollToBottom,
+      scheduleAssistantFlush,
       activeModelId,
       threadId,
     ],
@@ -321,11 +434,13 @@ export function ThreadView({ threadId }: ThreadViewProps) {
             </div>
             <div className="message-card__content">
               {message.role === "assistant" ? (
-                <AssistantMarkdown
-                  content={
-                    message.content || (isSending ? dictionary.thinking : "")
-                  }
-                />
+                message.id === streamingMessageId ? (
+                  <div className="message-streaming">
+                    {message.content || (isSending ? dictionary.thinking : "")}
+                  </div>
+                ) : (
+                  <AssistantMarkdown content={message.content} />
+                )
               ) : (
                 message.content
               )}
