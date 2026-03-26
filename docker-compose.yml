@@ -10,6 +10,8 @@ services:
       NODE_ENV: production
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
       HOME: /var/lib/copilot
+      XDG_RUNTIME_DIR: /var/lib/copilot/.runtime
+      DBUS_SESSION_BUS_ADDRESS: unix:path=/var/lib/copilot/.runtime/bus
       COPILOT_CLI_PATH: /usr/local/bin/copilot
     volumes:
       - ./.data:/app/.data
